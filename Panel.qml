@@ -41,15 +41,29 @@ Panel {
 
   function filteredMatches() {
     if (!service || !service.matches) return []
-    var list = service.matches
-    if (!filterText || filterText.trim() === "") return list
-    var q = filterText.trim().toLowerCase()
-    return list.filter(function(m) {
-      var trig = (m.triggers || []).join(" ").toLowerCase()
-      var repl = (m.replace || "").toLowerCase()
-      var lab = (m.label || "").toLowerCase()
-      return trig.indexOf(q) !== -1 || repl.indexOf(q) !== -1 || lab.indexOf(q) !== -1
+    var list = service.matches.slice()
+    var q = filterText ? filterText.trim().toLowerCase() : ""
+
+    if (q !== "") {
+      list = list.filter(function(m) {
+        var trig = (m.triggers || []).join(" ").toLowerCase()
+        var repl = (m.replace || "").toLowerCase()
+        var lab = (m.label || "").toLowerCase()
+        return trig.indexOf(q) !== -1 || repl.indexOf(q) !== -1 || lab.indexOf(q) !== -1
+      })
+    }
+
+    // Sort alphabetically A-Z by trigger (stripping leading prefix for natural sorting)
+    list.sort(function(a, b) {
+      var fullA = (a.triggers && a.triggers.length > 0) ? String(a.triggers[0]) : ""
+      var fullB = (b.triggers && b.triggers.length > 0) ? String(b.triggers[0]) : ""
+      var normA = fullA.replace(/^[\\\/:\.;,]+/, "").toLowerCase()
+      var normB = fullB.replace(/^[\\\/:\.;,]+/, "").toLowerCase()
+      var cmp = normA.localeCompare(normB)
+      return cmp !== 0 ? cmp : fullA.localeCompare(fullB)
     })
+
+    return list
   }
 
   function handleCopy(replaceText, triggerLabel) {
@@ -106,7 +120,7 @@ Panel {
           width: panelFlick.width
           spacing: Style.space(10)
 
-          // 1. Hero Header with status and Toggle Switch (Enables / Disables expansions)
+          // 1. Hero Header with status and Toggle Switch
           Item {
             id: header
             width: parent.width
@@ -207,7 +221,7 @@ Panel {
             }
           }
 
-          // 5. Match List (Clean static styling)
+          // 5. Match List (Alphabetically sorted)
           Column {
             id: matchColumn
             width: parent.width
