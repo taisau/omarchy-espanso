@@ -6,6 +6,7 @@ QtObject {
   id: root
 
   property var settings: null
+  property bool installed: true
   property bool running: false
   property bool enabled: true
   property bool busy: false
@@ -13,36 +14,45 @@ QtObject {
   readonly property int matchCount: matches.length
   readonly property string homeDir: Quickshell.env("HOME") || ""
   readonly property string configPath: homeDir + "/.config/espanso"
-  readonly property string statusText: !running
-    ? "Espanso stopped"
-    : (enabled ? "Expansions active" : "Expansions disabled")
+  readonly property string statusText: !installed
+    ? "Espanso is not installed"
+    : (!running
+        ? "Espanso stopped"
+        : (enabled ? "Expansions active" : "Expansions disabled"))
 
   readonly property int pollInterval: settings && settings.pollIntervalSec
     ? settings.pollIntervalSec * 1000
     : 10000
 
   function refresh() {
-    if (!statusProc.running) statusProc.running = true
-    if (!matchesProc.running) matchesProc.running = true
-    if (!logCheckProc.running) logCheckProc.running = true
+    if (!whichProc.running) whichProc.running = true
+    if (installed) {
+      if (!statusProc.running) statusProc.running = true
+      if (!matchesProc.running) matchesProc.running = true
+      if (!logCheckProc.running) logCheckProc.running = true
+    }
   }
 
   function toggle() {
+    if (!installed) return
     root.enabled = !root.enabled
     runCmd(["/usr/bin/espanso", "cmd", "toggle"])
   }
 
   function enable() {
+    if (!installed) return
     root.enabled = true
     runCmd(["/usr/bin/espanso", "cmd", "enable"])
   }
 
   function disable() {
+    if (!installed) return
     root.enabled = false
     runCmd(["/usr/bin/espanso", "cmd", "disable"])
   }
 
   function launchSearch() {
+    if (!installed) return
     runCmd(["/usr/bin/espanso", "cmd", "search"])
   }
 
@@ -55,11 +65,17 @@ QtObject {
   }
 
   function restartService() {
+    if (!installed) return
     runCmd(["/usr/bin/systemctl", "--user", "restart", "espanso"])
     Qt.callLater(function() {
       pollTimer.restart()
       root.refresh()
     })
+  }
+
+  function installEspanso() {
+    var script = (root.homeDir ? root.homeDir : "/home/taisau") + "/.config/omarchy/plugins/io.github.taisau.espanso/scripts/espanso-install.sh"
+    runCmd(["/usr/bin/omarchy-launch-floating-terminal", "bash " + script])
   }
 
   function showLogs() {
@@ -73,14 +89,14 @@ QtObject {
   }
 
   function injectMatch(trigger) {
-    if (!trigger) return
+    if (!trigger || !installed) return
     runCmd(["/usr/bin/espanso", "match", "exec", "-t", String(trigger)])
   }
 
   function runCmd(args) {
     var proc = cmdProc
     if (proc.running) {
-      var dynamicProc = Qt.createQmlObject('import Quickshell.Io 1.0; Process {}', root)
+      var dynamicProc = Qt.createQmlObject('import Quickshell.Io; Process {}', root)
       dynamicProc.command = args
       dynamicProc.exited.connect(function() {
         dynamicProc.destroy()
@@ -99,6 +115,19 @@ QtObject {
     running: true
     repeat: true
     onTriggered: root.refresh()
+  }
+
+  property var whichProc: Process {
+    id: whichProc
+    command: ["/usr/bin/which", "espanso"]
+    running: false
+    onExited: function(exitCode) {
+      root.installed = (exitCode === 0)
+      if (!root.installed) {
+        root.running = false
+        root.matches = []
+      }
+    }
   }
 
   property var statusProc: Process {

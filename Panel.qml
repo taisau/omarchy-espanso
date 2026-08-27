@@ -53,7 +53,6 @@ Panel {
       })
     }
 
-    // Sort alphabetically A-Z by trigger (stripping leading prefix for natural sorting)
     list.sort(function(a, b) {
       var fullA = (a.triggers && a.triggers.length > 0) ? String(a.triggers[0]) : ""
       var fullB = (b.triggers && b.triggers.length > 0) ? String(b.triggers[0]) : ""
@@ -78,7 +77,9 @@ Panel {
     if (opened) {
       if (service) service.refresh()
       root.filterText = ""
-      if (searchField) Qt.callLater(function() { searchField.forceActiveFocus() })
+      if (searchField && service && service.installed) {
+        Qt.callLater(function() { searchField.forceActiveFocus() })
+      }
     }
   }
 
@@ -120,7 +121,7 @@ Panel {
           width: panelFlick.width
           spacing: Style.space(10)
 
-          // 1. Hero Header with status and Toggle Switch
+          // 1. Hero Header
           Item {
             id: header
             width: parent.width
@@ -131,19 +132,21 @@ Panel {
               width: parent.width
               title: "Espanso"
               meta: root.service
-                ? (root.service.running
-                    ? (root.service.enabled ? "Active · " + root.service.matchCount + " snippets" : "Expansions disabled")
-                    : "Service stopped")
+                ? (!root.service.installed
+                    ? "Not installed"
+                    : (root.service.running
+                        ? (root.service.enabled ? "Active · " + root.service.matchCount + " snippets" : "Expansions disabled")
+                        : "Service stopped"))
                 : "Loading…"
               foreground: root.foreground
               fontFamily: root.fontFamily
-              iconOpacity: root.service && root.service.running && root.service.enabled ? 1.0 : 0.5
+              iconOpacity: root.service && root.service.installed && root.service.running && root.service.enabled ? 1.0 : 0.5
 
               iconComponent: Component {
                 Image {
                   width: hero.iconSize
                   height: hero.iconSize
-                  source: (root.service && root.service.enabled)
+                  source: (root.service && root.service.installed && root.service.enabled)
                     ? Qt.resolvedUrl("assets/espanso-outline.svg")
                     : Qt.resolvedUrl("assets/espanso-disabled.svg")
                   sourceSize.width: 48
@@ -156,7 +159,7 @@ Panel {
               trailingControl: Component {
                 ToggleSwitch {
                   id: powerSwitch
-                  visible: root.service && root.service.running
+                  visible: root.service && root.service.installed && root.service.running
                   checked: root.service ? root.service.enabled : false
                   foreground: hero.foreground
                   onToggled: {
@@ -173,9 +176,71 @@ Panel {
             }
           }
 
-          // 2. Search Filter Field
+          // 2. Install Banner (Shown only when Espanso is not installed)
+          BorderSurface {
+            visible: root.service && !root.service.installed
+            width: parent.width
+            color: Style.selectedFillFor(root.foreground, root.accent)
+            radius: Style.cornerRadius
+            borderSpec: Border.flat(root.accent, 1)
+
+            ColumnLayout {
+              anchors.fill: parent
+              anchors.margins: Style.space(12)
+              spacing: Style.space(8)
+
+              RowLayout {
+                spacing: Style.space(8)
+
+                Text {
+                  text: "󰏓"
+                  color: Color.accent
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.heading
+                }
+
+                ColumnLayout {
+                  Layout.fillWidth: true
+                  spacing: 1
+
+                  Text {
+                    text: "Install Espanso"
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                    font.bold: true
+                  }
+
+                  Text {
+                    text: "Installs espanso-wayland and starts the background service."
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                  }
+                }
+              }
+
+              Button {
+                Layout.fillWidth: true
+                text: "Install in Terminal"
+                iconText: "󰐕"
+                bordered: true
+                foreground: root.foreground
+                accent: root.accent
+                onClicked: {
+                  if (root.service) root.service.installEspanso()
+                  root.close()
+                }
+              }
+            }
+          }
+
+          // 3. Search Filter Field (Only shown when installed)
           TextField {
             id: searchField
+            visible: root.service && root.service.installed
             width: parent.width
             placeholderText: "Filter snippets (e.g. \\aad, email, code)…"
             foreground: root.foreground
@@ -184,7 +249,7 @@ Panel {
             onTextChanged: root.filterText = text
           }
 
-          // 3. Copied Notification Toast
+          // 4. Copied Notification Toast
           Text {
             visible: root.noticeVisible
             width: parent.width
@@ -197,12 +262,14 @@ Panel {
           }
 
           PanelSeparator {
+            visible: root.service && root.service.installed
             width: parent.width
             foreground: root.foreground
           }
 
-          // 4. Snippets Section Header
+          // 5. Snippets Section Header
           RowLayout {
+            visible: root.service && root.service.installed
             width: parent.width
             spacing: Style.space(6)
 
@@ -221,9 +288,10 @@ Panel {
             }
           }
 
-          // 5. Match List (Alphabetically sorted)
+          // 6. Match List
           Column {
             id: matchColumn
+            visible: root.service && root.service.installed
             width: parent.width
             spacing: Style.space(4)
 
