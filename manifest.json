@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.taisau.espanso",
+  "name": "Espanso",
+  "version": "1.0.0",
+  "author": "John Boyd",
+  "license": "MIT",
+  "description": "Espanso text expander controls, expansion toggle, native search launcher, and live snippet explorer for the Omarchy top bar.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Espanso",
+    "description": "Espanso status, toggle, native search, and live match snippet browser.",
+    "category": "Utilities",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "showMatchCount": false,
+      "pollIntervalSec": 10
+    },
+    "schema": [
+      {
+        "key": "showMatchCount",
+        "type": "boolean",
+        "label": "Show active match count next to bar icon",
+        "defaultValue": false
+      },
+      {
+        "key": "pollIntervalSec",
+        "type": "integer",
+        "label": "Status polling interval (seconds)",
+        "min": 5,
+        "max": 60,
+        "step": 5,
+        "defaultValue": 10
+      }
+    ]
+  }
+}
