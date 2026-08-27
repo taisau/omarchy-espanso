@@ -82,8 +82,8 @@ BarWidget {
         Image {
           id: iconImg
           anchors.centerIn: parent
-          width: Style.space(16)
-          height: Style.space(16)
+          width: Style.space(11)
+          height: Style.space(11)
           source: service.enabled ? Qt.resolvedUrl("assets/espanso-outline.svg") : Qt.resolvedUrl("assets/espanso-disabled.svg")
           sourceSize.width: 32
           sourceSize.height: 32
