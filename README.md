@@ -6,12 +6,16 @@ Control [Espanso](https://espanso.org/) directly from the Omarchy status bar.
 
 - **Status & One-Click Toggle:** View daemon health and instantly enable or disable text expansions with a toggle switch.
 - **Native Search Launcher:** Open Espanso's native GUI modal (`espanso cmd search`) to search and inject snippets into active windows.
-- **In-Panel Snippet Explorer:** Instant live filtering and preview of all defined matches; click any snippet to copy its replacement text to clipboard.
-- **Quick Controls:** Fast access to open your `~/.config/espanso` folder, edit `base.yml`, restart the service, or tail daemon logs.
+- **In-Panel Snippet Explorer:** Instant live filtering and preview of all defined matches (sorted alphabetically A-Z); click any snippet to copy its replacement text to the clipboard.
 - **Bar Shortcuts:**
   - **Left-Click:** Open/close the dropdown panel.
   - **Right-Click:** Instantly trigger native search.
   - **Middle-Click:** Instantly toggle expansions on/off.
+
+## Dependencies
+
+- `espanso` or `espanso-wayland`
+- `wl-clipboard` (for snippet clipboard copying)
 
 ## Installation
 
@@ -29,6 +33,12 @@ And add to `~/.config/omarchy/shell.json` in `bar.layout.right`:
 
 ```json
 { "id": "io.github.taisau.espanso" }
+```
+
+## Removal
+
+```bash
+omarchy plugin remove io.github.taisau.espanso
 ```
 
 ## License
