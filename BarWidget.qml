@@ -68,7 +68,7 @@ BarWidget {
     bar: root.bar
     tooltipText: !service.running
       ? "Espanso: Stopped"
-      : (service.enabled ? "Espanso: Active (L: panel, R: search, M: toggle)" : "Espanso: Disabled (Click to resume)")
+      : (service.enabled ? "Espanso: Active" : "Espanso: Disabled")
 
     iconComponent: Component {
       Item {
