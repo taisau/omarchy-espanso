@@ -106,7 +106,7 @@ Panel {
           width: panelFlick.width
           spacing: Style.space(10)
 
-          // 1. Hero Header with status and Toggle Switch
+          // 1. Hero Header with status and Toggle Switch (Enables / Disables expansions)
           Item {
             id: header
             width: parent.width
@@ -170,77 +170,7 @@ Panel {
             onTextChanged: root.filterText = text
           }
 
-          // 3. Button Row (Native Search, Config, Edit, Restart, Logs)
-          RowLayout {
-            width: parent.width
-            spacing: Style.space(6)
-
-            Button {
-              Layout.fillWidth: true
-              text: "Search"
-              iconText: "󰍉"
-              tooltipText: "Open native Espanso search modal"
-              foreground: root.foreground
-              fontSize: Style.font.caption
-              onClicked: {
-                if (root.service) root.service.launchSearch()
-                root.close()
-              }
-            }
-
-            Button {
-              Layout.fillWidth: true
-              text: "Config"
-              iconText: "󰉋"
-              tooltipText: "Open ~/.config/espanso in File Manager"
-              foreground: root.foreground
-              fontSize: Style.font.caption
-              onClicked: {
-                if (root.service) root.service.openConfigFolder()
-                root.close()
-              }
-            }
-
-            Button {
-              Layout.fillWidth: true
-              text: "Edit"
-              iconText: "󰏫"
-              tooltipText: "Edit match/base.yml"
-              foreground: root.foreground
-              fontSize: Style.font.caption
-              onClicked: {
-                if (root.service) root.service.editMatches()
-                root.close()
-              }
-            }
-
-            Button {
-              Layout.fillWidth: true
-              text: "Restart"
-              iconText: "󰑐"
-              tooltipText: "Restart espanso service"
-              foreground: root.foreground
-              fontSize: Style.font.caption
-              onClicked: {
-                if (root.service) root.service.restartService()
-              }
-            }
-
-            Button {
-              Layout.fillWidth: true
-              text: "Logs"
-              iconText: "󰌑"
-              tooltipText: "View espanso logs in terminal"
-              foreground: root.foreground
-              fontSize: Style.font.caption
-              onClicked: {
-                if (root.service) root.service.showLogs()
-                root.close()
-              }
-            }
-          }
-
-          // 4. Copied Notification Toast
+          // 3. Copied Notification Toast
           Text {
             visible: root.noticeVisible
             width: parent.width
@@ -257,7 +187,7 @@ Panel {
             foreground: root.foreground
           }
 
-          // 5. Snippets Section Header
+          // 4. Snippets Section Header
           RowLayout {
             width: parent.width
             spacing: Style.space(6)
@@ -277,7 +207,7 @@ Panel {
             }
           }
 
-          // 6. Match List (Clean static styling, no sticky hover)
+          // 5. Match List (Clean static styling)
           Column {
             id: matchColumn
             width: parent.width
@@ -314,7 +244,7 @@ Panel {
     }
   }
 
-  // Component for individual match card - static, clean styling without sticky hover fills
+  // Component for individual match card
   component MatchCard: BorderSurface {
     id: card
     property var match: null
