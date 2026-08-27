@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.taisau.espanso",
   "name": "Espanso",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "author": "John Boyd",
   "license": "MIT",
   "description": "Espanso text expander controls, expansion toggle, native search launcher, and live snippet explorer for the Omarchy top bar.",
