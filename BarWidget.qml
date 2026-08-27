@@ -66,16 +66,18 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    tooltipText: !service.running
-      ? "Espanso: Stopped"
-      : (service.enabled ? "Espanso: Active" : "Espanso: Disabled")
+    tooltipText: !service.installed
+      ? "Espanso: Not installed (Click to install)"
+      : (!service.running
+          ? "Espanso: Stopped"
+          : (service.enabled ? "Espanso: Active" : "Espanso: Disabled"))
 
     iconComponent: Component {
       Item {
         id: iconWrapper
         anchors.fill: parent
 
-        readonly property color iconColor: !service.running
+        readonly property color iconColor: !service.installed || !service.running
           ? (root.bar ? root.bar.urgent : Color.urgent)
           : (service.enabled ? (root.bar ? root.bar.foreground : Color.foreground) : Qt.darker(root.bar ? root.bar.foreground : Color.foreground, 1.6))
 
@@ -84,7 +86,7 @@ BarWidget {
           anchors.centerIn: parent
           width: Style.space(11)
           height: Style.space(11)
-          source: service.enabled ? Qt.resolvedUrl("assets/espanso-outline.svg") : Qt.resolvedUrl("assets/espanso-disabled.svg")
+          source: (service.installed && service.enabled) ? Qt.resolvedUrl("assets/espanso-outline.svg") : Qt.resolvedUrl("assets/espanso-disabled.svg")
           sourceSize.width: 32
           sourceSize.height: 32
           fillMode: Image.PreserveAspectFit
@@ -103,9 +105,9 @@ BarWidget {
     }
 
     onPressed: function(buttonCode) {
-      if (buttonCode === Qt.RightButton) {
+      if (buttonCode === Qt.RightButton && service.installed) {
         service.launchSearch()
-      } else if (buttonCode === Qt.MiddleButton) {
+      } else if (buttonCode === Qt.MiddleButton && service.installed) {
         service.toggle()
       } else {
         root.toggle()
