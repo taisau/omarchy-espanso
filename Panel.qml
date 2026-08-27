@@ -81,8 +81,8 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(390))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(600))
+    contentWidth: panel.fittedContentWidth(Style.space(400))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(620))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -106,7 +106,7 @@ Panel {
           width: panelFlick.width
           spacing: Style.space(10)
 
-          // Hero Header with status and Toggle Switch
+          // 1. Hero Header with status and Toggle Switch
           Item {
             id: header
             width: parent.width
@@ -159,59 +159,7 @@ Panel {
             }
           }
 
-          // Native Search Banner Button
-          Button {
-            id: nativeSearchBtn
-            width: parent.width
-            text: "Open Native Search Modal (wxWidgets)"
-            iconText: "󰍉"
-            bordered: true
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            fontSize: Style.font.body
-            onClicked: {
-              if (root.service) root.service.launchSearch()
-              root.close()
-            }
-          }
-
-          // Copied Notification Toast
-          Text {
-            visible: root.noticeVisible
-            width: parent.width
-            text: "✓  " + root.copiedNotice
-            color: Color.accent
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            font.bold: true
-            horizontalAlignment: Text.AlignHCenter
-          }
-
-          PanelSeparator {
-            width: parent.width
-            foreground: root.foreground
-          }
-
-          // Snippet Explorer Header + Search Input
-          RowLayout {
-            width: parent.width
-            spacing: Style.space(6)
-
-            PanelSectionHeader {
-              text: "SNIPPETS"
-              foreground: root.foreground
-              fontFamily: root.fontFamily
-              Layout.fillWidth: true
-            }
-
-            Text {
-              text: (root.service ? String(root.filteredMatches().length) : "0") + " matches"
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-            }
-          }
-
+          // 2. Search Filter Field
           TextField {
             id: searchField
             width: parent.width
@@ -222,48 +170,23 @@ Panel {
             onTextChanged: root.filterText = text
           }
 
-          // Match List
-          Column {
-            id: matchColumn
-            width: parent.width
-            spacing: Style.space(4)
-
-            Repeater {
-              model: root.filteredMatches()
-
-              MatchCard {
-                required property var modelData
-                required property int index
-                width: matchColumn.width
-                match: modelData
-                onCopyRequested: function(replaceVal, trigVal) {
-                  root.handleCopy(replaceVal, trigVal)
-                }
-              }
-            }
-
-            Text {
-              visible: root.filteredMatches().length === 0
-              width: parent.width
-              text: "No matching snippets found."
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              horizontalAlignment: Text.AlignHCenter
-              topPadding: Style.space(12)
-              bottomPadding: Style.space(12)
-            }
-          }
-
-          PanelSeparator {
-            width: parent.width
-            foreground: root.foreground
-          }
-
-          // Bottom Action Bar
+          // 3. Button Row (Native Search, Config, Edit, Restart, Logs)
           RowLayout {
             width: parent.width
             spacing: Style.space(6)
+
+            Button {
+              Layout.fillWidth: true
+              text: "Search"
+              iconText: "󰍉"
+              tooltipText: "Open native Espanso search modal"
+              foreground: root.foreground
+              fontSize: Style.font.caption
+              onClicked: {
+                if (root.service) root.service.launchSearch()
+                root.close()
+              }
+            }
 
             Button {
               Layout.fillWidth: true
@@ -316,12 +239,82 @@ Panel {
               }
             }
           }
+
+          // 4. Copied Notification Toast
+          Text {
+            visible: root.noticeVisible
+            width: parent.width
+            text: "✓  " + root.copiedNotice
+            color: Color.accent
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+            horizontalAlignment: Text.AlignHCenter
+          }
+
+          PanelSeparator {
+            width: parent.width
+            foreground: root.foreground
+          }
+
+          // 5. Snippets Section Header
+          RowLayout {
+            width: parent.width
+            spacing: Style.space(6)
+
+            PanelSectionHeader {
+              text: "SNIPPETS"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              Layout.fillWidth: true
+            }
+
+            Text {
+              text: (root.service ? String(root.filteredMatches().length) : "0") + " matches"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+          }
+
+          // 6. Match List (Clean static styling, no sticky hover)
+          Column {
+            id: matchColumn
+            width: parent.width
+            spacing: Style.space(4)
+
+            Repeater {
+              model: root.filteredMatches()
+
+              MatchCard {
+                required property var modelData
+                required property int index
+                width: matchColumn.width
+                match: modelData
+                onCopyRequested: function(replaceVal, trigVal) {
+                  root.handleCopy(replaceVal, trigVal)
+                }
+              }
+            }
+
+            Text {
+              visible: root.filteredMatches().length === 0
+              width: parent.width
+              text: "No matching snippets found."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              horizontalAlignment: Text.AlignHCenter
+              topPadding: Style.space(12)
+              bottomPadding: Style.space(12)
+            }
+          }
         }
       }
     }
   }
 
-  // Component for individual match card
+  // Component for individual match card - static, clean styling without sticky hover fills
   component MatchCard: BorderSurface {
     id: card
     property var match: null
@@ -334,13 +327,12 @@ Panel {
     width: parent.width
     implicitHeight: cardLayout.implicitHeight + Style.space(10)
     radius: Style.cornerRadius
-    color: cardMouse.containsMouse ? Style.hoverFillFor(root.foreground, root.accent) : "transparent"
-    borderSpec: Border.flat(cardMouse.containsMouse ? root.accent : Style.borderFor(root.foreground), 1)
+    color: "transparent"
+    borderSpec: Border.flat(Style.borderFor(root.foreground), 1)
 
     MouseArea {
       id: cardMouse
       anchors.fill: parent
-      hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: card.copyRequested(card.replaceStr, card.triggerStr)
     }
@@ -403,7 +395,7 @@ Panel {
       // Copy Action Icon
       Text {
         text: "󰆏"
-        color: cardMouse.containsMouse ? Color.accent : root.dim
+        color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.icon
         Layout.alignment: Qt.AlignVCenter
