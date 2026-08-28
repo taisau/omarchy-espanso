@@ -194,6 +194,7 @@ Panel {
 
                 Text {
                   text: "󰏓"
+                  textFormat: Text.PlainText
                   color: Color.accent
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.heading
@@ -205,6 +206,7 @@ Panel {
 
                   Text {
                     text: "Install Espanso"
+                    textFormat: Text.PlainText
                     color: root.foreground
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.body
@@ -213,6 +215,7 @@ Panel {
 
                   Text {
                     text: "Installs espanso-wayland and starts the background service."
+                    textFormat: Text.PlainText
                     color: root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
@@ -254,6 +257,7 @@ Panel {
             visible: root.noticeVisible
             width: parent.width
             text: "✓  " + root.copiedNotice
+            textFormat: Text.PlainText
             color: Color.accent
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
@@ -282,6 +286,7 @@ Panel {
 
             Text {
               text: (root.service ? String(root.filteredMatches().length) : "0") + " matches"
+              textFormat: Text.PlainText
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -313,6 +318,7 @@ Panel {
               visible: root.filteredMatches().length === 0
               width: parent.width
               text: "No matching snippets found."
+              textFormat: Text.PlainText
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
@@ -370,6 +376,7 @@ Panel {
           id: triggerText
           anchors.centerIn: parent
           text: card.triggerStr
+          textFormat: Text.PlainText
           color: Color.accent
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
@@ -386,6 +393,7 @@ Panel {
         Text {
           visible: card.labelStr !== ""
           text: card.labelStr
+          textFormat: Text.PlainText
           color: root.foreground
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
@@ -396,6 +404,7 @@ Panel {
 
         Text {
           text: card.replaceStr.replace(/\n/g, " ↵ ")
+          textFormat: Text.PlainText
           color: root.foreground
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
@@ -407,6 +416,7 @@ Panel {
       // Copy Action Icon
       Text {
         text: "󰆏"
+        textFormat: Text.PlainText
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.icon

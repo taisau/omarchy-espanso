@@ -24,6 +24,14 @@ QtObject {
     ? settings.pollIntervalSec * 1000
     : 10000
 
+  // Security and DoS protection ceilings
+  readonly property int maxJsonBytes: 1048576       // 1 MB max raw output ceiling
+  readonly property int maxMatchRecords: 500         // 500 match items ceiling
+  readonly property int maxTriggersPerItem: 10       // 10 triggers max per item
+  readonly property int maxTriggerLength: 100        // 100 chars max per trigger
+  readonly property int maxReplaceLength: 5000       // 5000 chars max per replacement string
+  readonly property int maxLabelLength: 200          // 200 chars max per label string
+
   function refresh() {
     if (!whichProc.running) whichProc.running = true
     if (installed) {
@@ -84,13 +92,15 @@ QtObject {
 
   function copyMatch(textToCopy) {
     if (!textToCopy) return
-    copyProc.command = ["/usr/bin/wl-copy", String(textToCopy)]
+    var sanitized = String(textToCopy).slice(0, root.maxReplaceLength)
+    copyProc.command = ["/usr/bin/wl-copy", sanitized]
     copyProc.running = true
   }
 
   function injectMatch(trigger) {
     if (!trigger || !installed) return
-    runCmd(["/usr/bin/espanso", "match", "exec", "-t", String(trigger)])
+    var sanitized = String(trigger).slice(0, root.maxTriggerLength)
+    runCmd(["/usr/bin/espanso", "match", "exec", "-t", sanitized])
   }
 
   function runCmd(args) {
@@ -149,7 +159,9 @@ QtObject {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        var lines = text.split("\n")
+        var maxLogBytes = 65536
+        var logText = text.length > maxLogBytes ? text.slice(text.length - maxLogBytes) : text
+        var lines = logText.split("\n")
         for (var i = lines.length - 1; i >= 0; i--) {
           var line = lines[i]
           if (line.indexOf("is_enabled = false") !== -1) {
@@ -174,9 +186,36 @@ QtObject {
         try {
           var trimmed = text.trim()
           if (trimmed.length > 0) {
+            if (trimmed.length > root.maxJsonBytes) {
+              console.warn("[espanso-plugin] match list exceeded byte ceiling (" + trimmed.length + " bytes), skipping")
+              return
+            }
             var parsed = JSON.parse(trimmed)
             if (Array.isArray(parsed)) {
-              root.matches = parsed
+              var count = Math.min(parsed.length, root.maxMatchRecords)
+              var sanitized = []
+              for (var i = 0; i < count; i++) {
+                var item = parsed[i]
+                if (!item || typeof item !== "object") continue
+
+                var rawTriggers = Array.isArray(item.triggers) ? item.triggers : []
+                var cleanTriggers = []
+                var trigCount = Math.min(rawTriggers.length, root.maxTriggersPerItem)
+                for (var t = 0; t < trigCount; t++) {
+                  var trig = String(rawTriggers[t] || "").slice(0, root.maxTriggerLength)
+                  if (trig.length > 0) cleanTriggers.push(trig)
+                }
+
+                var cleanReplace = String(item.replace || "").slice(0, root.maxReplaceLength)
+                var cleanLabel = item.label ? String(item.label).slice(0, root.maxLabelLength) : ""
+
+                sanitized.push({
+                  triggers: cleanTriggers,
+                  replace: cleanReplace,
+                  label: cleanLabel
+                })
+              }
+              root.matches = sanitized
             }
           }
         } catch (e) {
