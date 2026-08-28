@@ -24,13 +24,19 @@ QtObject {
     ? settings.pollIntervalSec * 1000
     : 10000
 
-  // Security and DoS protection ceilings
-  readonly property int maxJsonBytes: 1048576       // 1 MB max raw output ceiling
-  readonly property int maxMatchRecords: 500         // 500 match items ceiling
-  readonly property int maxTriggersPerItem: 10       // 10 triggers max per item
-  readonly property int maxTriggerLength: 100        // 100 chars max per trigger
-  readonly property int maxReplaceLength: 5000       // 5000 chars max per replacement string
-  readonly property int maxLabelLength: 200          // 200 chars max per label string
+  // Security, bounded stream, and DoS protection ceilings
+  readonly property int maxJsonBytes: 1048576       // 1 MiB hard stream buffer ceiling
+  readonly property int maxLogBytes: 65536          // 64 KiB log buffer ceiling
+  readonly property int maxStatusBytes: 4096        // 4 KiB status buffer ceiling
+  readonly property int maxMatchRecords: 500        // 500 match items ceiling
+  readonly property int maxTriggersPerItem: 10      // 10 triggers max per item
+  readonly property int maxTriggerLength: 100       // 100 chars max per trigger
+  readonly property int maxReplaceLength: 5000      // 5000 chars max per replacement string
+  readonly property int maxLabelLength: 200         // 200 chars max per label string
+
+  property string _rawMatchBuffer: ""
+  property string _rawLogBuffer: ""
+  property string _rawStatusBuffer: ""
 
   function refresh() {
     if (!whichProc.running) whichProc.running = true
@@ -103,6 +109,57 @@ QtObject {
     runCmd(["/usr/bin/espanso", "match", "exec", "-t", sanitized])
   }
 
+  function parseMatches(rawJson) {
+    try {
+      var trimmed = (rawJson || "").trim()
+      if (trimmed.length > 0) {
+        var parsed = JSON.parse(trimmed)
+        if (Array.isArray(parsed)) {
+          var count = Math.min(parsed.length, root.maxMatchRecords)
+          var sanitized = []
+          for (var i = 0; i < count; i++) {
+            var item = parsed[i]
+            if (!item || typeof item !== "object") continue
+
+            var rawTriggers = Array.isArray(item.triggers) ? item.triggers : []
+            var cleanTriggers = []
+            var trigCount = Math.min(rawTriggers.length, root.maxTriggersPerItem)
+            for (var t = 0; t < trigCount; t++) {
+              var trig = String(rawTriggers[t] || "").slice(0, root.maxTriggerLength)
+              if (trig.length > 0) cleanTriggers.push(trig)
+            }
+
+            var cleanReplace = String(item.replace || "").slice(0, root.maxReplaceLength)
+            var cleanLabel = item.label ? String(item.label).slice(0, root.maxLabelLength) : ""
+
+            sanitized.push({
+              triggers: cleanTriggers,
+              replace: cleanReplace,
+              label: cleanLabel
+            })
+          }
+          root.matches = sanitized
+        }
+      }
+    } catch (e) {
+      console.warn("[espanso-plugin] JSON parse error on match list:", e)
+    }
+  }
+
+  function parseLog(rawLogs) {
+    var lines = (rawLogs || "").split("\n")
+    for (var i = lines.length - 1; i >= 0; i--) {
+      var line = lines[i]
+      if (line.indexOf("is_enabled = false") !== -1) {
+        root.enabled = false
+        break
+      } else if (line.indexOf("is_enabled = true") !== -1) {
+        root.enabled = true
+        break
+      }
+    }
+  }
+
   function runCmd(args) {
     var proc = cmdProc
     if (proc.running) {
@@ -127,9 +184,10 @@ QtObject {
     onTriggered: root.refresh()
   }
 
+  // Binary detection with timeout
   property var whichProc: Process {
     id: whichProc
-    command: ["/usr/bin/which", "espanso"]
+    command: ["/bin/sh", "-c", "exec timeout 2 /usr/bin/which espanso 2>/dev/null | head -c 256"]
     running: false
     onExited: function(exitCode) {
       root.installed = (exitCode === 0)
@@ -140,88 +198,75 @@ QtObject {
     }
   }
 
+  // Bounded status check: OS timeout + OS head + incremental stream bounding
   property var statusProc: Process {
     id: statusProc
-    command: ["/usr/bin/espanso", "status"]
+    command: ["/bin/sh", "-c", "exec timeout 3 /usr/bin/espanso status 2>/dev/null | head -c 4096"]
     running: false
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        root.running = (text.indexOf("espanso is running") !== -1)
+    stdout: SplitParser {
+      onRead: function(chunk) {
+        if (root._rawStatusBuffer.length < root.maxStatusBytes) {
+          var remaining = root.maxStatusBytes - root._rawStatusBuffer.length
+          root._rawStatusBuffer += String(chunk || "").slice(0, remaining)
+        } else if (statusProc.running) {
+          statusProc.running = false
+        }
       }
+    }
+    onStarted: {
+      root._rawStatusBuffer = ""
+    }
+    onExited: function(exitCode) {
+      root.running = (root._rawStatusBuffer.indexOf("espanso is running") !== -1)
+      root._rawStatusBuffer = ""
     }
   }
 
+  // Bounded log check: OS timeout + OS head + incremental stream bounding
   property var logCheckProc: Process {
     id: logCheckProc
-    command: ["/usr/bin/journalctl", "--user", "-u", "espanso", "-n", "30", "--no-pager"]
+    command: ["/bin/sh", "-c", "exec timeout 3 /usr/bin/journalctl --user -u espanso -n 30 --no-pager 2>/dev/null | head -c 65536"]
     running: false
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var maxLogBytes = 65536
-        var logText = text.length > maxLogBytes ? text.slice(text.length - maxLogBytes) : text
-        var lines = logText.split("\n")
-        for (var i = lines.length - 1; i >= 0; i--) {
-          var line = lines[i]
-          if (line.indexOf("is_enabled = false") !== -1) {
-            root.enabled = false
-            break
-          } else if (line.indexOf("is_enabled = true") !== -1) {
-            root.enabled = true
-            break
-          }
+    stdout: SplitParser {
+      onRead: function(line) {
+        if (root._rawLogBuffer.length < root.maxLogBytes) {
+          var remaining = root.maxLogBytes - root._rawLogBuffer.length
+          root._rawLogBuffer += (String(line || "") + "\n").slice(0, remaining)
+        } else if (logCheckProc.running) {
+          logCheckProc.running = false
         }
       }
     }
+    onStarted: {
+      root._rawLogBuffer = ""
+    }
+    onExited: function(exitCode) {
+      root.parseLog(root._rawLogBuffer)
+      root._rawLogBuffer = ""
+    }
   }
 
+  // Bounded match collection: OS timeout + OS head + incremental stream bounding + item limits
   property var matchesProc: Process {
     id: matchesProc
-    command: ["/usr/bin/espanso", "match", "list", "--json"]
+    command: ["/bin/sh", "-c", "exec timeout 5 /usr/bin/espanso match list --json 2>/dev/null | head -c 1048576"]
     running: false
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        try {
-          var trimmed = text.trim()
-          if (trimmed.length > 0) {
-            if (trimmed.length > root.maxJsonBytes) {
-              console.warn("[espanso-plugin] match list exceeded byte ceiling (" + trimmed.length + " bytes), skipping")
-              return
-            }
-            var parsed = JSON.parse(trimmed)
-            if (Array.isArray(parsed)) {
-              var count = Math.min(parsed.length, root.maxMatchRecords)
-              var sanitized = []
-              for (var i = 0; i < count; i++) {
-                var item = parsed[i]
-                if (!item || typeof item !== "object") continue
-
-                var rawTriggers = Array.isArray(item.triggers) ? item.triggers : []
-                var cleanTriggers = []
-                var trigCount = Math.min(rawTriggers.length, root.maxTriggersPerItem)
-                for (var t = 0; t < trigCount; t++) {
-                  var trig = String(rawTriggers[t] || "").slice(0, root.maxTriggerLength)
-                  if (trig.length > 0) cleanTriggers.push(trig)
-                }
-
-                var cleanReplace = String(item.replace || "").slice(0, root.maxReplaceLength)
-                var cleanLabel = item.label ? String(item.label).slice(0, root.maxLabelLength) : ""
-
-                sanitized.push({
-                  triggers: cleanTriggers,
-                  replace: cleanReplace,
-                  label: cleanLabel
-                })
-              }
-              root.matches = sanitized
-            }
-          }
-        } catch (e) {
-          console.warn("[espanso-plugin] JSON parse error on match list:", e)
+    stdout: SplitParser {
+      onRead: function(line) {
+        if (root._rawMatchBuffer.length < root.maxJsonBytes) {
+          var remaining = root.maxJsonBytes - root._rawMatchBuffer.length
+          root._rawMatchBuffer += (String(line || "") + "\n").slice(0, remaining)
+        } else if (matchesProc.running) {
+          matchesProc.running = false
         }
       }
+    }
+    onStarted: {
+      root._rawMatchBuffer = ""
+    }
+    onExited: function(exitCode) {
+      root.parseMatches(root._rawMatchBuffer)
+      root._rawMatchBuffer = ""
     }
   }
 
