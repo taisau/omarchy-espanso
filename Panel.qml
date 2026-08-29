@@ -363,26 +363,19 @@ Panel {
       anchors.verticalCenter: parent.verticalCenter
       anchors.leftMargin: Style.space(8)
       anchors.rightMargin: Style.space(8)
-      spacing: Style.space(8)
+      spacing: Style.space(10)
 
-      // Trigger Badge
-      BorderSurface {
-        color: Style.selectedFillFor(root.foreground, root.accent)
-        radius: Style.space(4)
-        implicitWidth: triggerText.implicitWidth + Style.space(10)
-        implicitHeight: triggerText.implicitHeight + Style.space(4)
+      // Trigger Badge / Label
+      Text {
+        text: card.triggerStr
+        textFormat: Text.PlainText
+        color: Color.accent
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.bodySmall
+        font.bold: true
+        Layout.preferredWidth: Style.space(64)
+        elide: Text.ElideRight
         Layout.alignment: Qt.AlignVCenter
-
-        Text {
-          id: triggerText
-          anchors.centerIn: parent
-          text: card.triggerStr
-          textFormat: Text.PlainText
-          color: Color.accent
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
-          font.bold: true
-        }
       }
 
       // Snippet Preview
