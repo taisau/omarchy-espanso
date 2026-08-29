@@ -79,7 +79,7 @@ BarWidget {
 
         readonly property color iconColor: !service.installed || !service.running
           ? (root.bar ? root.bar.urgent : Color.urgent)
-          : (service.enabled ? (root.bar ? root.bar.foreground : Color.foreground) : Qt.darker(root.bar ? root.bar.foreground : Color.foreground, 1.6))
+          : (service.enabled ? (root.bar ? root.bar.barForeground : Color.foreground) : Qt.darker(root.bar ? root.bar.barForeground : Color.foreground, 1.6))
 
         Image {
           id: iconImg
