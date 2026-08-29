@@ -333,7 +333,7 @@ Panel {
   }
 
   // Component for individual match card
-  component MatchCard: BorderSurface {
+  component MatchCard: CursorSurface {
     id: card
     property var match: null
     signal copyRequested(string replaceVal, string trigVal)
@@ -344,13 +344,14 @@ Panel {
 
     width: parent.width
     implicitHeight: cardLayout.implicitHeight + Style.space(10)
-    radius: Style.cornerRadius
-    color: "transparent"
-    borderSpec: Border.flat(Style.borderFor(root.foreground), 1)
+    foreground: root.foreground
+    accent: root.accent
+    hasCursor: cardMouse.containsMouse
 
     MouseArea {
       id: cardMouse
       anchors.fill: parent
+      hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: card.copyRequested(card.replaceStr, card.triggerStr)
     }
@@ -417,7 +418,7 @@ Panel {
       Text {
         text: "󰆏"
         textFormat: Text.PlainText
-        color: root.dim
+        color: cardMouse.containsMouse ? root.foreground : root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.icon
         Layout.alignment: Qt.AlignVCenter
