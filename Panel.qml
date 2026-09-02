@@ -65,12 +65,22 @@ Panel {
     return list
   }
 
+  function showNotice(text) {
+    root.copiedNotice = text
+    root.noticeVisible = true
+    noticeTimer.restart()
+  }
+
   function handleCopy(replaceText, triggerLabel) {
     if (!service) return
     service.copyMatch(replaceText)
-    root.copiedNotice = "Copied \"" + triggerLabel + "\" to clipboard"
-    root.noticeVisible = true
-    noticeTimer.restart()
+    showNotice("Copied \"" + triggerLabel + "\" to clipboard")
+  }
+
+  function handleRestart() {
+    if (!service || !service.installed || service.restarting) return
+    service.restartService()
+    showNotice("Restarting espanso…")
   }
 
   onOpenedChanged: {
@@ -134,9 +144,13 @@ Panel {
               meta: root.service
                 ? (!root.service.installed
                     ? "Not installed"
-                    : (root.service.running
-                        ? (root.service.enabled ? "Active · " + root.service.matchCount + " snippets" : "Expansions disabled")
-                        : "Service stopped"))
+                    : (root.service.restarting
+                        ? "Restarting…"
+                        : (root.service.running
+                            ? (root.service.deaf
+                                ? "Lost input devices · restart needed"
+                                : (root.service.enabled ? "Active · " + root.service.matchCount + " snippets" : "Expansions disabled"))
+                            : "Service stopped")))
                 : "Loading…"
               foreground: root.foreground
               fontFamily: root.fontFamily
@@ -237,6 +251,110 @@ Panel {
                   root.close()
                 }
               }
+            }
+          }
+
+          // 2b. Health Banner (Shown when the worker has lost its input devices)
+          BorderSurface {
+            visible: root.service && root.service.deaf
+            width: parent.width
+            implicitHeight: healthLayout.implicitHeight + Style.space(24)
+            color: Style.selectedFillFor(root.urgent, root.urgent)
+            radius: Style.cornerRadius
+            borderSpec: Border.flat(root.urgent, 1)
+
+            ColumnLayout {
+              id: healthLayout
+              anchors.fill: parent
+              anchors.margins: Style.space(12)
+              spacing: Style.space(8)
+
+              RowLayout {
+                spacing: Style.space(8)
+
+                Text {
+                  text: "󰌌"
+                  textFormat: Text.PlainText
+                  color: root.urgent
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.heading
+                }
+
+                ColumnLayout {
+                  Layout.fillWidth: true
+                  spacing: 1
+
+                  Text {
+                    text: "Espanso stopped seeing your keyboard"
+                    textFormat: Text.PlainText
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                    font.bold: true
+                  }
+
+                  Text {
+                    text: "The worker dropped " + (root.service ? root.service.lostDevices : 0)
+                      + " input device(s) after a disconnect (monitor hub, KVM, dock) and does not rescan. Restart to pick them up."
+                    textFormat: Text.PlainText
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                  }
+                }
+              }
+
+              Button {
+                Layout.fillWidth: true
+                text: "Restart Espanso"
+                iconText: "󰑓"
+                bordered: true
+                foreground: root.foreground
+                accent: root.urgent
+                enabled: root.service && !root.service.restarting
+                onClicked: root.handleRestart()
+              }
+            }
+          }
+
+          // 2c. Service row: worker uptime plus restart and log actions
+          RowLayout {
+            visible: root.service && root.service.installed
+            width: parent.width
+            spacing: Style.space(6)
+
+            Text {
+              Layout.fillWidth: true
+              text: root.service && root.service.workerPid > 0
+                ? "Worker up " + root.service.formatUptime(root.service.workerUptimeSec) + " · pid " + root.service.workerPid
+                : "Worker not running"
+              textFormat: Text.PlainText
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              elide: Text.ElideRight
+            }
+
+            PanelActionButton {
+              iconText: "󰌱"
+              tooltipText: "Show service logs"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              onClicked: {
+                if (root.service) root.service.showLogs()
+                root.close()
+              }
+            }
+
+            PanelActionButton {
+              iconText: "󰑓"
+              tooltipText: "Restart espanso service"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              enabled: root.service && !root.service.restarting
+              onClicked: root.handleRestart()
             }
           }
 
