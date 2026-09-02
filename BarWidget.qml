@@ -68,16 +68,20 @@ BarWidget {
     bar: root.bar
     tooltipText: !service.installed
       ? "Espanso: Not installed (Click to install)"
-      : (!service.running
-          ? "Espanso: Stopped"
-          : (service.enabled ? "Espanso: Active" : "Espanso: Disabled"))
+      : (service.restarting
+          ? "Espanso: Restarting…"
+          : (!service.running
+              ? "Espanso: Stopped"
+              : (service.deaf
+                  ? "Espanso: Lost input devices (open to restart)"
+                  : (service.enabled ? "Espanso: Active" : "Espanso: Disabled"))))
 
     iconComponent: Component {
       Item {
         id: iconWrapper
         anchors.fill: parent
 
-        readonly property color iconColor: !service.installed || !service.running
+        readonly property color iconColor: !service.installed || !service.running || service.deaf
           ? (root.bar ? root.bar.urgent : Color.urgent)
           : (service.enabled ? (root.bar ? root.bar.foreground : Color.foreground) : Qt.darker(root.bar ? root.bar.foreground : Color.foreground, 1.6))
 

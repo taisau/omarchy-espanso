@@ -10,15 +10,29 @@ QtObject {
   property bool running: false
   property bool enabled: true
   property bool busy: false
+  property bool restarting: false
   property var matches: []
+
+  // Worker health. Espanso's evdev backend drops any keyboard that disconnects
+  // (monitor USB hub power-cycling on DPMS off, KVM switches, docks) and never
+  // rescans, so the daemon keeps reporting "running" while it no longer sees a
+  // single keystroke. Count those log lines for the current worker process.
+  property int workerPid: 0
+  property int workerUptimeSec: 0
+  property int lostDevices: 0
+  readonly property bool deaf: running && lostDevices > 0
   readonly property int matchCount: matches.length
   readonly property string homeDir: Quickshell.env("HOME") || ""
   readonly property string configPath: homeDir + "/.config/espanso"
   readonly property string statusText: !installed
     ? "Espanso is not installed"
-    : (!running
-        ? "Espanso stopped"
-        : (enabled ? "Expansions active" : "Expansions disabled"))
+    : (restarting
+        ? "Restarting…"
+        : (!running
+            ? "Espanso stopped"
+            : (deaf
+                ? "Lost input devices"
+                : (enabled ? "Expansions active" : "Expansions disabled"))))
 
   readonly property int pollInterval: settings && settings.pollIntervalSec
     ? settings.pollIntervalSec * 1000
@@ -28,6 +42,7 @@ QtObject {
   readonly property int maxJsonBytes: 1048576       // 1 MiB hard stream buffer ceiling
   readonly property int maxLogBytes: 65536          // 64 KiB log buffer ceiling
   readonly property int maxStatusBytes: 4096        // 4 KiB status buffer ceiling
+  readonly property int maxHealthBytes: 256         // 256 B worker health line ceiling
   readonly property int maxMatchRecords: 500        // 500 match items ceiling
   readonly property int maxTriggersPerItem: 10      // 10 triggers max per item
   readonly property int maxTriggerLength: 100       // 100 chars max per trigger
@@ -37,6 +52,7 @@ QtObject {
   property string _rawMatchBuffer: ""
   property string _rawLogBuffer: ""
   property string _rawStatusBuffer: ""
+  property string _rawHealthBuffer: ""
 
   function refresh() {
     if (!whichProc.running) whichProc.running = true
@@ -44,7 +60,19 @@ QtObject {
       if (!statusProc.running) statusProc.running = true
       if (!matchesProc.running) matchesProc.running = true
       if (!logCheckProc.running) logCheckProc.running = true
+      if (!healthProc.running) healthProc.running = true
     }
+  }
+
+  function formatUptime(sec) {
+    sec = Math.max(0, Math.floor(sec))
+    var d = Math.floor(sec / 86400)
+    var h = Math.floor((sec % 86400) / 3600)
+    var m = Math.floor((sec % 3600) / 60)
+    if (d > 0) return d + "d " + h + "h"
+    if (h > 0) return h + "h " + m + "m"
+    if (m > 0) return m + "m"
+    return sec + "s"
   }
 
   function toggle() {
@@ -79,12 +107,12 @@ QtObject {
   }
 
   function restartService() {
-    if (!installed) return
+    if (!installed || restarting) return
+    root.restarting = true
+    root.lostDevices = 0
     runCmd(["/usr/bin/systemctl", "--user", "restart", "espanso"])
-    Qt.callLater(function() {
-      pollTimer.restart()
-      root.refresh()
-    })
+    settleTimer.ticks = 0
+    settleTimer.restart()
   }
 
   function installEspanso() {
@@ -176,6 +204,25 @@ QtObject {
     }
   }
 
+  // The worker takes a couple of seconds to come back after a restart, so
+  // re-poll a few times instead of waiting for the next periodic refresh.
+  property var settleTimer: Timer {
+    id: settleTimer
+    property int ticks: 0
+    interval: 1500
+    repeat: true
+    running: false
+    onTriggered: {
+      settleTimer.ticks += 1
+      root.refresh()
+      if (settleTimer.ticks >= 4) {
+        settleTimer.running = false
+        root.restarting = false
+        pollTimer.restart()
+      }
+    }
+  }
+
   property var timer: Timer {
     id: pollTimer
     interval: root.pollInterval
@@ -219,6 +266,44 @@ QtObject {
     onExited: function(exitCode) {
       root.running = (root._rawStatusBuffer.indexOf("espanso is running") !== -1)
       root._rawStatusBuffer = ""
+    }
+  }
+
+  // Bounded worker health check: prints "<pid> <uptime-seconds> <lost-device-count>"
+  // for the current espanso worker, or nothing when no worker is running. The
+  // journal is filtered to that PID so a restart naturally resets the count.
+  property var healthProc: Process {
+    id: healthProc
+    command: ["/bin/sh", "-c",
+      "exec timeout 3 /bin/sh -c '" +
+      "pid=$(pgrep -o -f \"^(/usr/bin/)?espanso worker\" 2>/dev/null) || exit 0; " +
+      "up=$(ps -o etimes= -p \"$pid\" 2>/dev/null | tr -d \" \"); " +
+      "lost=$(journalctl --user -u espanso \"_PID=$pid\" -o cat --no-pager 2>/dev/null | grep -c \"removing from epoll\"); " +
+      "echo \"$pid ${up:-0} ${lost:-0}\"' | head -c 256"]
+    running: false
+    stdout: SplitParser {
+      onRead: function(line) {
+        if (root._rawHealthBuffer.length < root.maxHealthBytes) {
+          var remaining = root.maxHealthBytes - root._rawHealthBuffer.length
+          root._rawHealthBuffer += String(line || "").slice(0, remaining)
+        }
+      }
+    }
+    onStarted: {
+      root._rawHealthBuffer = ""
+    }
+    onExited: function(exitCode) {
+      var parts = root._rawHealthBuffer.trim().split(/\s+/)
+      root._rawHealthBuffer = ""
+      if (parts.length >= 3 && parts[0] !== "") {
+        root.workerPid = parseInt(parts[0], 10) || 0
+        root.workerUptimeSec = parseInt(parts[1], 10) || 0
+        root.lostDevices = parseInt(parts[2], 10) || 0
+      } else {
+        root.workerPid = 0
+        root.workerUptimeSec = 0
+        root.lostDevices = 0
+      }
     }
   }
 
