@@ -98,8 +98,12 @@ QtObject {
 
   function copyMatch(textToCopy) {
     if (!textToCopy) return
-    var sanitized = String(textToCopy).slice(0, root.maxReplaceLength)
-    copyProc.command = ["/usr/bin/wl-copy", sanitized]
+    // The replacement text may contain credentials, so it is streamed to
+    // wl-copy over stdin and never placed in the command line (argv), which
+    // is world readable via /proc while the process runs.
+    copyProc.pendingText = String(textToCopy).slice(0, root.maxReplaceLength)
+    copyProc.command = ["/usr/bin/wl-copy"]
+    copyProc.stdinEnabled = true
     copyProc.running = true
   }
 
@@ -278,7 +282,13 @@ QtObject {
 
   property var copyProc: Process {
     id: copyProc
+    property string pendingText: ""
     running: false
+    onStarted: {
+      write(pendingText)
+      pendingText = ""
+      stdinEnabled = false // closes stdin, giving wl-copy EOF so it commits the selection
+    }
   }
 
   Component.onCompleted: root.refresh()
