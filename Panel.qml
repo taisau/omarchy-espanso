@@ -18,6 +18,14 @@ Panel {
   property string filterText: ""
   property string copiedNotice: ""
   property bool noticeVisible: false
+  property bool noticeIsError: false
+  property bool editorOpen: false
+  property string editingId: ""
+  property string editTrigger: ""
+  property string editReplacement: ""
+  property bool editWord: false
+  property string deleteId: ""
+  property string deleteTrigger: ""
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
@@ -69,8 +77,53 @@ Panel {
     if (!service) return
     service.copyMatch(replaceText)
     root.copiedNotice = "Copied \"" + triggerLabel + "\" to clipboard"
+    root.noticeIsError = false
     root.noticeVisible = true
     noticeTimer.restart()
+  }
+
+  function beginCreate() {
+    root.deleteId = ""
+    root.editingId = ""
+    root.editTrigger = ""
+    root.editReplacement = ""
+    root.editWord = false
+    triggerField.text = ""
+    replacementField.text = ""
+    root.editorOpen = true
+    Qt.callLater(function() { triggerField.forceActiveFocus() })
+  }
+
+  function beginEdit(match) {
+    root.deleteId = ""
+    root.editingId = match.managedId
+    root.editTrigger = match.triggers[0]
+    root.editReplacement = match.replace
+    root.editWord = match.word === true
+    triggerField.text = root.editTrigger
+    replacementField.text = root.editReplacement
+    root.editorOpen = true
+    Qt.callLater(function() { triggerField.forceActiveFocus() })
+  }
+
+  function beginDelete(match) {
+    root.editorOpen = false
+    root.deleteId = match.managedId
+    root.deleteTrigger = match.triggers[0]
+  }
+
+  Connections {
+    target: root.service
+    function onMutationFinished(success, message) {
+      root.copiedNotice = message
+      root.noticeIsError = !success
+      root.noticeVisible = true
+      noticeTimer.restart()
+      if (success) {
+        root.editorOpen = false
+        root.deleteId = ""
+      }
+    }
   }
 
   onOpenedChanged: {
@@ -252,19 +305,6 @@ Panel {
             onTextChanged: root.filterText = text
           }
 
-          // 4. Copied Notification Toast
-          Text {
-            visible: root.noticeVisible
-            width: parent.width
-            text: "✓  " + root.copiedNotice
-            textFormat: Text.PlainText
-            color: Color.accent
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            font.bold: true
-            horizontalAlignment: Text.AlignHCenter
-          }
-
           PanelSeparator {
             visible: root.service && root.service.installed
             width: parent.width
@@ -291,6 +331,154 @@ Panel {
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
             }
+
+            Button {
+              text: "New"
+              iconText: "󰐕"
+              bordered: false
+              foreground: root.foreground
+              accent: root.accent
+              enabled: root.service && !root.service.busy
+              onClicked: root.beginCreate()
+            }
+          }
+
+          BorderSurface {
+            visible: root.editorOpen
+            width: parent.width
+            color: Style.selectedFillFor(root.foreground, root.accent)
+            radius: Style.cornerRadius
+            borderSpec: Border.flat(root.accent, 1)
+            implicitHeight: editorColumn.implicitHeight + Style.space(20)
+
+            ColumnLayout {
+              id: editorColumn
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.top: parent.top
+              anchors.margins: Style.space(10)
+              spacing: Style.space(7)
+
+              Text {
+                text: root.editingId ? "Edit expansion" : "New expansion"
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                font.bold: true
+              }
+
+              TextField {
+                id: triggerField
+                Layout.fillWidth: true
+                placeholderText: "Trigger, e.g. ;email"
+                foreground: root.foreground
+                accent: root.accent
+                onTextChanged: root.editTrigger = text
+              }
+
+              TextArea {
+                id: replacementField
+                Layout.fillWidth: true
+                Layout.preferredHeight: Style.space(86)
+                placeholderText: "Replacement text"
+                onTextChanged: root.editReplacement = text
+                wrapMode: TextEdit.Wrap
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                background: Rectangle {
+                  color: Style.selectedFillFor(root.foreground, root.accent)
+                  radius: Style.cornerRadius
+                  border.color: root.dim
+                  border.width: 1
+                }
+              }
+
+              RowLayout {
+                Layout.fillWidth: true
+                spacing: Style.space(8)
+
+                Text {
+                  text: "Word match"
+                  textFormat: Text.PlainText
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  Layout.fillWidth: true
+                }
+
+                ToggleSwitch {
+                  checked: root.editWord
+                  foreground: root.foreground
+                  accent: root.accent
+                  onToggled: root.editWord = !root.editWord
+                }
+              }
+
+              RowLayout {
+                Layout.alignment: Qt.AlignRight
+                spacing: Style.space(6)
+
+                Button {
+                  text: "Cancel"
+                  bordered: false
+                  foreground: root.foreground
+                  accent: root.accent
+                  onClicked: root.editorOpen = false
+                }
+                Button {
+                  text: "Save"
+                  bordered: true
+                  foreground: root.foreground
+                  accent: root.accent
+                  enabled: root.service && !root.service.busy
+                  onClicked: root.service.changeMatch(root.editingId ? "update" : "create",
+                    root.editingId, root.editTrigger, root.editReplacement, root.editWord)
+                }
+              }
+            }
+          }
+
+          BorderSurface {
+            visible: root.deleteId !== ""
+            width: parent.width
+            color: Style.selectedFillFor(root.foreground, root.accent)
+            radius: Style.cornerRadius
+            borderSpec: Border.flat(root.urgent, 1)
+            implicitHeight: deleteRow.implicitHeight + Style.space(16)
+
+            RowLayout {
+              id: deleteRow
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.margins: Style.space(8)
+
+              Text {
+                text: "Delete " + root.deleteTrigger + "?"
+                textFormat: Text.PlainText
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+              }
+              Button {
+                text: "Cancel"
+                bordered: false
+                foreground: root.foreground
+                accent: root.accent
+                onClicked: root.deleteId = ""
+              }
+              Button {
+                text: "Delete"
+                bordered: true
+                foreground: root.foreground
+                accent: root.urgent
+                enabled: root.service && !root.service.busy
+                onClicked: root.service.changeMatch("delete", root.deleteId, "", "")
+              }
+            }
           }
 
           // 6. Match List
@@ -311,6 +499,8 @@ Panel {
                 onCopyRequested: function(replaceVal, trigVal) {
                   root.handleCopy(replaceVal, trigVal)
                 }
+                onEditRequested: root.beginEdit(modelData)
+                onDeleteRequested: root.beginDelete(modelData)
               }
             }
 
@@ -329,6 +519,38 @@ Panel {
           }
         }
       }
+
+      Rectangle {
+        id: noticeToast
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Style.space(4)
+        height: noticeText.implicitHeight + Style.space(16)
+        visible: root.noticeVisible
+        z: 1
+        color: Color.popups.background
+        border.color: root.noticeIsError ? root.urgent : root.accent
+        border.width: 1
+        radius: Style.cornerRadius
+
+        Text {
+          id: noticeText
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.leftMargin: Style.space(8)
+          anchors.rightMargin: Style.space(8)
+          text: (root.noticeIsError ? "!  " : "✓  ") + root.copiedNotice
+          textFormat: Text.PlainText
+          color: root.noticeIsError ? root.urgent : root.accent
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          font.bold: true
+          horizontalAlignment: Text.AlignHCenter
+          wrapMode: Text.WordWrap
+        }
+      }
     }
   }
 
@@ -337,6 +559,8 @@ Panel {
     id: card
     property var match: null
     signal copyRequested(string replaceVal, string trigVal)
+    signal editRequested()
+    signal deleteRequested()
 
     readonly property string triggerStr: match && match.triggers ? match.triggers.join(", ") : ""
     readonly property string replaceStr: match && match.replace ? String(match.replace) : ""
@@ -415,6 +639,40 @@ Panel {
         font.family: root.fontFamily
         font.pixelSize: Style.font.icon
         Layout.alignment: Qt.AlignVCenter
+      }
+
+      Text {
+        visible: card.match && card.match.managedId
+        text: "󰏫"
+        textFormat: Text.PlainText
+        color: editMouse.containsMouse ? root.accent : root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.icon
+        Layout.alignment: Qt.AlignVCenter
+        MouseArea {
+          id: editMouse
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: card.editRequested()
+        }
+      }
+
+      Text {
+        visible: card.match && card.match.managedId
+        text: "󰆴"
+        textFormat: Text.PlainText
+        color: deleteMouse.containsMouse ? root.urgent : root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.icon
+        Layout.alignment: Qt.AlignVCenter
+        MouseArea {
+          id: deleteMouse
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: card.deleteRequested()
+        }
       }
     }
   }

@@ -11,9 +11,13 @@ QtObject {
   property bool enabled: true
   property bool busy: false
   property var matches: []
+  property var espansoMatches: []
+  property var managedMatches: []
+  signal mutationFinished(bool success, string message)
   readonly property int matchCount: matches.length
   readonly property string homeDir: Quickshell.env("HOME") || ""
   readonly property string configPath: homeDir + "/.config/espanso"
+  readonly property string helperPath: homeDir + "/.config/omarchy/plugins/io.github.taisau.espanso/scripts/espanso-matches.py"
   readonly property string statusText: !installed
     ? "Espanso is not installed"
     : (!running
@@ -43,6 +47,7 @@ QtObject {
     if (installed) {
       if (!statusProc.running) statusProc.running = true
       if (!matchesProc.running) matchesProc.running = true
+      if (!managedProc.running) managedProc.running = true
       if (!logCheckProc.running) logCheckProc.running = true
     }
   }
@@ -109,6 +114,57 @@ QtObject {
     runCmd(["/usr/bin/espanso", "match", "exec", "-t", sanitized])
   }
 
+  function rebuildMatches() {
+    var rows = root.espansoMatches.map(function(item) {
+      return { triggers: item.triggers, replace: item.replace, label: item.label, managedId: "", word: false }
+    })
+    for (var i = 0; i < root.managedMatches.length; i++) {
+      var managed = root.managedMatches[i]
+      var found = false
+      for (var j = 0; j < rows.length; j++) {
+        if (!rows[j].managedId && rows[j].triggers.length === 1
+            && rows[j].triggers[0] === managed.trigger
+            && rows[j].replace === managed.replace) {
+          rows[j].managedId = managed.id
+          rows[j].word = managed.word === true
+          found = true
+          break
+        }
+      }
+      if (!found) rows.push({ triggers: [managed.trigger], replace: managed.replace, label: "", managedId: managed.id, word: managed.word === true })
+    }
+    root.matches = rows
+  }
+
+  function changeMatch(action, matchId, trigger, replacement, word) {
+    if (root.busy || !root.installed) return
+    if (action === "create" || action === "update") {
+      trigger = String(trigger || "").trim()
+      replacement = String(replacement || "")
+      if (!trigger || !replacement) {
+        root.mutationFinished(false, "Enter a trigger and replacement")
+        return
+      }
+      for (var i = 0; i < root.matches.length; i++) {
+        var match = root.matches[i]
+        if (match.managedId !== matchId && match.triggers.indexOf(trigger) !== -1) {
+          root.mutationFinished(false, "That trigger is already in use")
+          return
+        }
+      }
+    }
+    var args = ["/usr/bin/python3", root.helperPath, action]
+    if (action !== "create") args.push(matchId)
+    if (action !== "delete") {
+      args.push(trigger, replacement)
+      if (word) args.push("--word")
+    }
+    root._mutationError = ""
+    mutationProc.command = args
+    root.busy = true
+    mutationProc.running = true
+  }
+
   function parseMatches(rawJson) {
     try {
       var trimmed = (rawJson || "").trim()
@@ -138,7 +194,8 @@ QtObject {
               label: cleanLabel
             })
           }
-          root.matches = sanitized
+          root.espansoMatches = sanitized
+          root.rebuildMatches()
         }
       }
     } catch (e) {
@@ -267,6 +324,57 @@ QtObject {
     onExited: function(exitCode) {
       root.parseMatches(root._rawMatchBuffer)
       root._rawMatchBuffer = ""
+    }
+  }
+
+  property var managedProc: Process {
+    id: managedProc
+    command: ["/usr/bin/python3", root.helperPath, "list"]
+    running: false
+    stdout: SplitParser {
+      onRead: function(chunk) {
+        if (root._rawManagedBuffer.length < root.maxJsonBytes) {
+          var remaining = root.maxJsonBytes - root._rawManagedBuffer.length
+          root._rawManagedBuffer += (String(chunk || "") + "\n").slice(0, remaining)
+        } else if (managedProc.running) {
+          managedProc.running = false
+        }
+      }
+    }
+    onStarted: root._rawManagedBuffer = ""
+    onExited: function(exitCode) {
+      if (exitCode === 0) {
+        try {
+          var parsed = JSON.parse(root._rawManagedBuffer)
+          if (Array.isArray(parsed)) {
+            root.managedMatches = parsed.slice(0, root.maxMatchRecords)
+            root.rebuildMatches()
+          }
+        } catch (e) {
+          console.warn("[espanso-plugin] Managed match JSON parse error:", e)
+        }
+      }
+      root._rawManagedBuffer = ""
+    }
+  }
+
+  property string _rawManagedBuffer: ""
+  property string _mutationError: ""
+
+  property var mutationProc: Process {
+    id: mutationProc
+    running: false
+    stderr: SplitParser {
+      onRead: function(chunk) { root._mutationError += String(chunk || "") + "\n" }
+    }
+    onExited: function(exitCode) {
+      root.busy = false
+      if (exitCode === 0) {
+        root.refresh()
+        root.mutationFinished(true, "Expansion saved")
+      } else {
+        root.mutationFinished(false, root._mutationError.trim() || "Could not save expansion")
+      }
     }
   }
 
